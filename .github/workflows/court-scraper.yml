@@ -48,7 +48,7 @@ jobs:
 
       - name: Run sequential case scanner (API-based, no browser)
         run: |
-          python sequential_case_scraper.py --prefixes VI --years 2024-2026 --delay 0.3 --limit 2000
+          python sequential_case_scraper.py --prefixes VI --year 2024 --end-year 2026 --delay 0.3 --limit 2000
 
       - name: Upload DB to serv00
         env:

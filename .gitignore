@@ -1,34 +1,5 @@
-# State / runtime
-state/
-output/
-.cap_profile/
-logs/
-
-# Environment / secrets
-.env
-secrets.local.*
-*.local.*
-
-# Backups
-*.bak
-*backup*
-*_backup_*
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# OS
-Thumbs.db
-.DS_Store
-
-# IDE
-.vscode/
-.idea/
-
-# Generated run artifacts
-*.db-shm
-*.db-wal
-*.lock
+browser_profile/
+test_debug.py
+test_detail.py
+test_goback.py
+test_newtab.py
