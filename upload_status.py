@@ -11,7 +11,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = SCRIPT_DIR / "state" / "court_calendar.db"
-REMOTE_DIR = "/domains/upnexx.xyz/public_html/osint/private"
+REMOTE_DIR = "/domains/upnexx.xyz/public_html/status"
 REMOTE_STATUS_FILE = "scraper_status.json"
 
 FTP_HOST = os.environ.get("FTP_HOST", "")
