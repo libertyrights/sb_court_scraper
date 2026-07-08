@@ -44,7 +44,11 @@ jobs:
           CAP_PASSWORD: ${{ secrets.CAP_PASSWORD }}
           CAP_HEADLESS: '1'
         run: |
-          python vv_court_criminal_calendar_watch.py --start-date "" --days 7 --resume --no-details
+          python vv_court_criminal_calendar_watch.py --start-date "" --days 7 --resume
+
+      - name: Run sequential case scanner (API-based, no browser)
+        run: |
+          python sequential_case_scraper.py --prefixes VI --years 2024-2026 --delay 0.3 --limit 2000
 
       - name: Upload DB to serv00
         env:
