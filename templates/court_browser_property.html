@@ -1,0 +1,73 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Property Record</div>
+    <h2>APN: {{ prop.apn }}</h2>
+    <p>{{ prop.street_name }}{% if prop.city %}, {{ prop.city }}{% endif %}{% if prop.zip %} {{ prop.zip }}{% endif %}</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">{{ prop.linked_cases|length }} linked case{{ '' if prop.linked_cases|length == 1 else 's' }}</span>
+    {% if prop.property_value %}<span class="header-chip">${{ '{:,.0f}'.format(prop.property_value) }}</span>{% endif %}
+    {% if prop.acreage %}<span class="header-chip">{{ prop.acreage }} ac</span>{% endif %}
+  </div>
+</header>
+
+<section class="detail-card">
+  <div class="detail-card-title">Property Details</div>
+  <dl class="detail-grid">
+    <div><dt>APN</dt><dd><code>{{ prop.apn }}</code></dd></div>
+    <div><dt>Address</dt><dd>{{ prop.street_name }}{% if prop.unit %} #{{ prop.unit }}{% endif %}{% if prop.city %}, {{ prop.city }}{% endif %}{% if prop.state %} {{ prop.state }}{% endif %}{% if prop.zip %} {{ prop.zip }}{% endif %}</dd></div>
+    <div><dt>Owner</dt><dd>{{ prop.owner_name or 'Unknown' }}</dd></div>
+    <div><dt>Property Value</dt><dd>{% if prop.property_value %}${{ '{:,.0f}'.format(prop.property_value) }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Acreage</dt><dd>{% if prop.acreage %}{{ prop.acreage }} acres{% else %}—{% endif %}</dd></div>
+    {% if prop.latitude and prop.longitude %}
+    <div><dt>Coordinates</dt><dd>{{ prop.latitude }}, {{ prop.longitude }}</dd></div>
+    {% endif %}
+    <div><dt>Source</dt><dd>{{ prop.source or '—' }}</dd></div>
+  </dl>
+</section>
+
+{% if prop.linked_cases %}
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Linked Cases ({{ prop.linked_cases|length }})</h3>
+      <p>Code enforcement and other cases tied to this parcel.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Case Number</th>
+          <th>Status</th>
+          <th>Category</th>
+          <th>Link Type</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in prop.linked_cases %}
+        <tr>
+          <td>
+            {% if row.cap_case_id %}
+            <a href="{{ case_url(row.cap_case_id) }}">{{ row.case_number }}</a>
+            {% else %}
+            {{ row.case_number }}
+            {% endif %}
+          </td>
+          <td>{{ row.status or 'Not scraped' }}</td>
+          <td>{% if row.category %}<span class="badge badge-{{ row.category.lower() }}">{{ row.category }}</span>{% else %}-{% endif %}</td>
+          <td>{{ row.link_type }}</td>
+          <td>{{ row.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

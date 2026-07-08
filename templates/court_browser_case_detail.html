@@ -1,0 +1,678 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+    <div class="page-kicker">Subject Workspace</div>
+    <h2><a href="{{ person_url(detail.overview.defendant_name) }}" style="text-decoration:none;color:inherit">{{ detail.overview.defendant_name }}</a></h2>
+    <p>Current case {{ detail.overview.case_number }} tied into subject, jail, call, link, and report views.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">{{ detail.overview.status or 'No status' }}</span>
+    {% if detail.overview.category %}<span class="badge badge-{{ detail.overview.category.lower() }}">{{ detail.overview.category }}</span>{% endif %}
+    <span class="header-chip">{{ detail.person_cases|length }} related case{{ '' if detail.person_cases|length == 1 else 's' }}</span>
+    <span class="header-chip">{{ detail.booking_numbers|length }} booking number{{ '' if detail.booking_numbers|length == 1 else 's' }}</span>
+  </div>
+</header>
+
+{% if flash %}
+<section class="launch-status {{ 'launch-status-error' if flash_state == 'error' else 'launch-status-success' }}">
+  <strong>{{ 'Action failed.' if flash_state == 'error' else 'Action complete.' }}</strong>
+  <span>{{ flash }}</span>
+</section>
+{% endif %}
+
+<section class="detail-card">
+  <div class="detail-card-title">Quick Actions</div>
+  <div class="helper-summary-grid">
+    <div><span>Case ID</span><strong>{{ detail.overview.cap_case_id }}</strong></div>
+    <div><span>Filed</span><strong>{{ detail.overview.file_date or '-' }}</strong></div>
+    <div><span>Latest Booking</span><strong>{{ detail.latest_jail_capture.booking_number if detail.latest_jail_capture else (detail.jail_prefill.booking or '-') }}</strong></div>
+    <div><span>Linked Call Logs</span><strong>{{ detail.calllog_links|length }}</strong></div>
+  </div>
+  <div class="action-grid" style="margin-top: 16px;">
+    <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action">
+      <input type="hidden" name="action" value="court_refresh">
+      <input type="hidden" name="next_tab" value="{{ active_case_tab }}">
+      <button type="submit">Update Court Case</button>
+    </form>
+
+    <a class="button-secondary" href="/jail-import?case={{ detail.overview.cap_case_id }}">Scrape Jail Page</a>
+
+    <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action">
+      <input type="hidden" name="action" value="launch_jail">
+      <input type="hidden" name="next_tab" value="jail-info">
+      <button type="submit">Update Jail Info</button>
+    </form>
+
+    <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action">
+      <input type="hidden" name="action" value="auto_link_calllog">
+      <input type="hidden" name="next_tab" value="calls">
+      <button type="submit">Auto Link Call Log</button>
+    </form>
+
+    <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action">
+      <input type="hidden" name="action" value="auto_link_lcn">
+      <input type="hidden" name="next_tab" value="links">
+      <button type="submit">Auto Link LCN</button>
+    </form>
+
+    <a class="button-secondary" href="/">Back to Search</a>
+  </div>
+</section>
+
+<section class="detail-card">
+  <div class="detail-card-title">Tabs</div>
+  <div class="case-tab-strip">
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'cases' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'cases') }}">Case List</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'case-detail' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'case-detail') }}">Case Detail</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'jail-info' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'jail-info') }}">Jail Info</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'booking-numbers' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'booking-numbers') }}">Jail Numbers</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'calls' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'calls') }}">Call List</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'links' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'links') }}">Links</a>
+    <a class="case-tab {{ 'case-tab-active' if active_case_tab == 'report' else '' }}" href="{{ case_tab_url(detail.overview.cap_case_id, 'report') }}">Report</a>
+  </div>
+</section>
+
+{% if active_case_tab == 'cases' %}
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Related Cases</h3>
+      <p>Cases tied to this subject by defendant entity or matching defendant name.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>Status</th>
+          <th>Filed</th>
+          <th>Next Hearing</th>
+          <th>Top Charge</th>
+          <th>Agency</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.person_cases %}
+        <tr class="{{ 'selected-row' if row.cap_case_id == detail.overview.cap_case_id else '' }}">
+          <td>
+            <strong><a href="{{ case_url(row.cap_case_id) }}">{{ row.case_number }}</a></strong>
+            <small>{{ row.cap_case_id }}</small>
+          </td>
+          <td>{{ row.status or '-' }}</td>
+          <td>{{ row.file_date or '-' }}</td>
+          <td>{{ row.next_hearing_date or '-' }}{% if row.next_hearing_time %} {{ row.next_hearing_time }}{% endif %}</td>
+          <td>{{ clean_charge_description(row.charge_preview, row.top_statute) or row.top_statute or '-' }}</td>
+          <td>{{ row.arresting_agency or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-cell">No related cases found yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if active_case_tab == 'case-detail' %}
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Case Overview</div>
+    <dl class="detail-grid">
+      <div><dt>Case Number</dt><dd>{{ detail.overview.case_number }}</dd></div>
+      <div><dt>Status</dt><dd>{{ detail.overview.status or '-' }}</dd></div>
+      <div><dt>Category</dt><dd>{% if detail.overview.category %}<span class="badge badge-{{ detail.overview.category.lower() }}">{{ detail.overview.category }}</span>{% else %}-{% endif %}</dd></div>
+      <div><dt>Filed</dt><dd>{{ detail.overview.file_date or '-' }}</dd></div>
+      <div><dt>Citation</dt><dd>{{ detail.overview.citation_number or '-' }}</dd></div>
+      <div><dt>Next Hearing</dt><dd>{{ detail.overview.next_hearing or '-' }}</dd></div>
+      <div><dt>Detail Scraped</dt><dd>{{ detail.overview.detail_scraped_at or '-' }}</dd></div>
+    </dl>
+    {% if detail.cross_refs %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reference Type</th>
+            <th>Reference Number</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.cross_refs %}
+          <tr>
+            <td>{{ row.reference_type or '-' }}</td>
+            <td>{{ row.reference_number or '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Subject Profile</div>
+    <dl class="detail-grid">
+      <div><dt>Name</dt><dd>{{ detail.overview.defendant_name }}</dd></div>
+      <div><dt>Party Entity ID</dt><dd>{{ detail.person_identity.party_entity_id or '-' }}</dd></div>
+      <div><dt>Aliases</dt><dd>{{ detail.aliases|map(attribute='full_name')|join(', ') or '-' }}</dd></div>
+      <div><dt>Demographics</dt><dd>{% if detail.demographics %}{{ detail.demographics[0].sex or '-' }} / {{ detail.demographics[0].race or '-' }} / {{ detail.demographics[0].age_text or '-' }}{% else %}-{% endif %}</dd></div>
+    </dl>
+  </article>
+</section>
+
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Charges</h3>
+      <p>Current case charge rows in table form.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Charge</th>
+          <th>Description</th>
+          <th>Degree</th>
+          <th>Offense Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.charges %}
+        <tr>
+          <td>{{ strip_charge_suffix(row.statute_raw or '') or row.charge_number or '-' }}</td>
+          <td>{{ clean_charge_description(row.offense_description, row.statute_raw) or row.offense_description or '-' }}</td>
+          <td>{{ row.degree or '-' }}</td>
+          <td>{{ row.offense_date or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty-cell">No charges captured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Hearings</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Calendar</th>
+            <th>Judge</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.hearings %}
+          <tr>
+            <td>{{ row.hearing_date or '-' }}{% if row.hearing_time %} {{ row.hearing_time }}{% endif %}</td>
+            <td>{{ row.hearing_type_text or '-' }}</td>
+            <td>{{ row.calendar_text or '-' }}</td>
+            <td>{{ row.judge_text or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty-cell">No hearings captured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Parties and Aliases</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Defendant</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.parties %}
+          <tr>
+            <td>{{ row.full_name or row.business_name or '-' }}</td>
+            <td>{{ row.party_type or '-' }}</td>
+            <td>{{ 'Yes' if row.is_defendant else 'No' }}</td>
+          </tr>
+          {% endfor %}
+          {% for row in detail.aliases %}
+          <tr>
+            <td>{{ row.full_name or '-' }}</td>
+            <td>Alias</td>
+            <td>-</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Documents</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Effective Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.documents %}
+          <tr>
+            <td>{{ row.name or '-' }}</td>
+            <td>{{ row.doc_type or '-' }}</td>
+            <td>{{ row.effective_date or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="empty-cell">No documents captured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Events and Jobs</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Date / Time</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.events %}
+          <tr>
+            <td>Event</td>
+            <td>{{ row.event_date or '-' }}</td>
+            <td>{{ row.event_type or '-' }}{% if row.comment %} - {{ row.comment }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+          {% for row in detail.case_jobs %}
+          <tr>
+            <td>Job</td>
+            <td>{{ row.updated_at or '-' }}</td>
+            <td>{{ row.label }} - {{ row.status|upper }} - <a href="/logs?job={{ row.job_key }}">Open log</a></td>
+          </tr>
+          {% endfor %}
+          {% if not detail.events and not detail.case_jobs %}
+          <tr><td colspan="3" class="empty-cell">No events or jobs recorded yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{% endif %}
+
+{% if active_case_tab == 'jail-info' %}
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card accent-card">
+    <div class="detail-card-title">Latest Jail Info</div>
+    {% if detail.latest_jail_capture %}
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><th>Booking</th><td>{{ detail.latest_jail_capture.booking_number or '-' }}</td></tr>
+          <tr><th>Captured</th><td>{{ detail.latest_jail_capture.captured_at or detail.latest_jail_capture.created_at or '-' }}</td></tr>
+          <tr><th>Inmate</th><td>{{ detail.latest_jail_capture.inmate_name or detail.overview.defendant_name }}</td></tr>
+          <tr><th>DOB / Age</th><td>{{ detail.latest_jail_capture.dob or '-' }}{% if detail.latest_jail_capture.age %} / {{ detail.latest_jail_capture.age }}{% endif %}</td></tr>
+          <tr><th>Agency</th><td>{{ detail.latest_jail_capture.arrest_agency or '-' }}</td></tr>
+          <tr><th>Location</th><td>{{ detail.latest_jail_capture.arrest_location or '-' }}</td></tr>
+          <tr><th>Housing</th><td>{{ detail.latest_jail_capture.housing_facility or '-' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p>No jail capture has been saved yet. The jail prefill is still shown below so you can launch the helper fast.</p>
+    {% endif %}
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Jail Prefill</div>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><th>Booking</th><td>{{ detail.jail_prefill.booking or '-' }}</td></tr>
+          <tr><th>Name</th><td>{{ detail.jail_prefill.last_name or '-' }}, {{ detail.jail_prefill.first_name or '-' }} {{ detail.jail_prefill.middle_name or '' }}</td></tr>
+          <tr><th>DOB</th><td>{{ detail.jail_prefill.dob or '-' }}</td></tr>
+          <tr><th>Age</th><td>{{ detail.jail_prefill.age or '-' }}</td></tr>
+          <tr><th>Gender</th><td>{{ detail.jail_prefill.gender_label or '-' }}</td></tr>
+          <tr><th>Agency</th><td>{{ detail.jail_prefill.agency or '-' }}</td></tr>
+          <tr><th>Location</th><td>{{ detail.jail_prefill.location or '-' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions" style="margin-top: 14px;">
+      <a class="button-secondary" href="{{ detail.open_jail_url }}">Open In Jail</a>
+      {% if thats_them_url %}
+      <a class="button-secondary" href="{{ thats_them_url }}" target="_blank" rel="noreferrer">That'sThem Age Search</a>
+      {% endif %}
+    </div>
+  </article>
+</section>
+
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Jail Capture History</h3>
+      <p>Person-wide jail captures we have saved so far.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Captured</th>
+          <th>Case</th>
+          <th>Booking</th>
+          <th>Inmate</th>
+          <th>Agency</th>
+          <th>Location</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.person_jail_captures %}
+        <tr>
+          <td>{{ row.captured_at or row.created_at or '-' }}</td>
+          <td>{{ row.case_number or '-' }}</td>
+          <td>{{ row.booking_number or '-' }}</td>
+          <td>{{ row.inmate_name or row.defendant_name or '-' }}</td>
+          <td>{{ row.arrest_agency or '-' }}</td>
+          <td>{{ row.arrest_location or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-cell">No saved jail pulls yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if active_case_tab == 'booking-numbers' %}
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Booking Numbers</h3>
+      <p>Every booking number we currently have for this subject.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Booking Number</th>
+          <th>Case</th>
+          <th>Latest Seen</th>
+          <th>Name</th>
+          <th>Agency</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.booking_numbers %}
+        <tr>
+          <td><strong>{{ row.booking_number }}</strong></td>
+          <td>{{ row.case_number or '-' }}</td>
+          <td>{{ row.captured_at or '-' }}</td>
+          <td>{{ row.inmate_name or '-' }}</td>
+          <td>{{ row.agency or '-' }}</td>
+          <td>{{ row.source or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-cell">No booking numbers are available yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if active_case_tab == 'calls' %}
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Linked Call Log Entries</h3>
+      <p>Call numbers are shown person-wide and cross-populate across related cases when linked.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Call Number</th>
+          <th>Case</th>
+          <th>Confidence</th>
+          <th>Basis</th>
+          <th>Notes</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.calllog_links %}
+        <tr>
+          <td><strong>{{ row.external_id or '-' }}</strong></td>
+          <td>{{ row.case_number or '-' }}</td>
+          <td>{{ row.match_confidence or '-' }}</td>
+          <td>{{ row.match_basis or '-' }}</td>
+          <td>{{ row.notes or '-' }}</td>
+          <td>{{ row.updated_at or row.created_at or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-cell">No linked call log entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if detail.best_calllog_candidate %}
+  <section class="detail-card detail-card-tight" style="margin-top: 18px;">
+    <div class="detail-card-title">Best Auto-Link Candidate</div>
+    <dl class="detail-grid">
+      <div><dt>Call Number</dt><dd>{{ detail.best_calllog_candidate.base_call_number }}</dd></div>
+      <div><dt>Score</dt><dd>{{ detail.best_calllog_candidate.score }}</dd></div>
+      <div><dt>Date Time</dt><dd>{{ detail.best_calllog_candidate.date_time or '-' }}</dd></div>
+      <div><dt>Charge</dt><dd>{{ detail.best_calllog_candidate.charge or '-' }}</dd></div>
+    </dl>
+  </section>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if active_case_tab == 'links' %}
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Open In</div>
+    <div class="action-row">
+      <a class="button-secondary" href="{{ detail.open_jail_url }}">Open In Jail</a>
+      <a class="button-secondary" href="{{ detail.open_court_url }}" target="_blank" rel="noreferrer">Open In Court</a>
+      <a class="button-secondary" href="{{ detail.open_lcn_url }}" target="_blank" rel="noreferrer">Open In LCN</a>
+    </div>
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Manual Linking</div>
+    <div class="manual-link-grid">
+      <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action" class="manual-link-form">
+        <input type="hidden" name="action" value="manual_link_calllog">
+        <input type="hidden" name="next_tab" value="links">
+        <label>
+          <span>Known Call Number</span>
+          <input type="text" name="call_number" placeholder="BA261770039">
+        </label>
+        <button type="submit">Manual Call Log Link</button>
+      </form>
+
+      <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action" class="manual-link-form">
+        <input type="hidden" name="action" value="manual_link_lcn">
+        <input type="hidden" name="next_tab" value="links">
+        <label>
+          <span>LCN Detail URL</span>
+          <input type="text" name="lcn_url" placeholder="https://www.localcrimenews.com/welcome/detail/...">
+        </label>
+        <div class="action-row">
+          <button type="submit">Manual LCN Link</button>
+          <a class="button-secondary" href="{{ lcn_home_url }}" target="_blank" rel="noreferrer">Open LCN Search</a>
+        </div>
+      </form>
+    </div>
+  </article>
+</section>
+
+{% if detail.property_links %}
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Property Links</h3>
+      <p>Code enforcement properties linked to this case.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>APN</th>
+          <th>Type</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.property_links %}
+        <tr>
+          <td><a href="{{ property_url(row.apn) }}"><code>{{ row.apn }}</code></a></td>
+          <td>{{ row.link_type }}</td>
+          <td>{{ row.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Linked Systems</h3>
+      <p>Saved external links across this subject's related cases.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Case</th>
+          <th>ID</th>
+          <th>Confidence</th>
+          <th>Basis</th>
+          <th>Open</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail.person_links %}
+        <tr>
+          <td>{{ row.external_source|upper }}</td>
+          <td>{{ row.case_number or '-' }}</td>
+          <td>{{ row.external_id or '-' }}</td>
+          <td>{{ row.match_confidence or '-' }}</td>
+          <td>{{ row.match_basis or '-' }}</td>
+          <td>{% if row.external_url %}<a href="{{ row.external_url }}" target="_blank" rel="noreferrer">Open</a>{% else %}-{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-cell">No external links saved yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if active_case_tab == 'report' %}
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Saved Report Presets</div>
+    <ul class="stack-list compact">
+      {% for row in report_presets %}
+      <li>
+        <strong><a href="{{ case_tab_url(detail.overview.cap_case_id, 'report', report=row.id) }}">{{ row.preset_name }}</a></strong>
+        <span>{{ row.updated_at or row.created_at or '-' }}</span>
+      </li>
+      {% else %}
+      <li><span>No saved report presets yet.</span></li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">Report Builder</div>
+    <form method="post" action="/case/{{ detail.overview.cap_case_id }}/action" class="report-builder-form">
+      <input type="hidden" name="next_tab" value="report">
+      <div class="report-field-grid">
+        {% for row in report_field_catalog %}
+        <label class="report-field-option">
+          <input type="checkbox" name="field_{{ row.key }}" value="1" {{ 'checked' if row.key in selected_report_keys else '' }}>
+          <span><strong>{{ row.label }}</strong><small>{{ row.section }}</small></span>
+        </label>
+        {% endfor %}
+      </div>
+      <label style="margin-top: 16px;">
+        <span>Preset Name</span>
+        <input type="text" name="preset_name" value="{{ selected_report_preset.preset_name if selected_report_preset else '' }}" placeholder="Example: Quick Subject Snapshot">
+      </label>
+      <div class="form-actions" style="margin-top: 14px;">
+        <button type="submit" formaction="{{ case_url(detail.overview.cap_case_id) }}" formmethod="get">Preview Report</button>
+        <button type="submit" name="action" value="save_report_preset">Save Field Set</button>
+      </div>
+      <input type="hidden" name="tab" value="report">
+    </form>
+  </article>
+</section>
+
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>Report Preview</h3>
+      <p>Selected subject and case fields, ready for copy/paste or later export work.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Section</th>
+          <th>Field</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report_rows %}
+        <tr>
+          <td>{{ row.section }}</td>
+          <td>{{ row.label }}</td>
+          <td>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noreferrer">{{ row.value or row.url }}</a>{% else %}{{ row.value or '-' }}{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="empty-cell">Choose at least one field to preview a report.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

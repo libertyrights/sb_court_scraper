@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liberty Rights Scraper Status</title>
+<style>
+  :root { color-scheme: light dark; --bg: #0b1220; --panel: #14213d; --text: #f5f7fb; --muted: #c8d2e5; --accent: #f4b400; --green: #4caf50; --red: #f44336; --line: rgba(255,255,255,0.12); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; padding: 24px; font-family: "Segoe UI",Tahoma,Geneva,Verdana,sans-serif; background: radial-gradient(circle at top,rgba(244,180,0,0.22),transparent 35%),linear-gradient(180deg,#08111f,var(--bg)); color: var(--text); }
+  .container { width: min(960px,100%); margin: 0 auto; }
+  header { text-align: center; margin-bottom: 32px; }
+  header h1 { font-size: clamp(1.5rem,3vw,2.5rem); margin: 0 0 8px; }
+  header p { color: var(--muted); margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 16px; }
+  .card { background: rgba(20,33,61,0.92); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .card h2 { margin: 0 0 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .dot.yellow { background: #ff9800; box-shadow: 0 0 6px #ff9800; }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+  .stat:last-child { border-bottom: none; }
+  .stat .label { color: var(--muted); }
+  .stat .value { font-weight: 600; }
+  .meta { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); text-align: center; }
+  .error { color: var(--red); }
+  .last-updated { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Liberty Rights Scraper Status</h1>
+    <p>Live health monitoring for court and call-log data pipelines</p>
+    <p class="last-updated" id="lastUpdated">Loading...</p>
+  </header>
+
+  <div class="grid" id="dashboard">
+    <div class="card" id="card-court">
+      <h2><span class="dot yellow" id="dot-court"></span> Court Scraper</h2>
+      <div id="court-status"><p class="error">Loading...</p></div>
+    </div>
+
+    <div class="card" id="card-calllog">
+      <h2><span class="dot yellow" id="dot-calllog"></span> Call Log Scraper</h2>
+      <div id="calllog-status"><p class="error">Loading...</p></div>
+    </div>
+  </div>
+
+  <div class="meta" id="footer">
+    <p>Data refreshed from serv00 storage backend</p>
+  </div>
+</div>
+
+<script>
+const COURT_STATUS_URL = '../osint/private/scraper_status.json';
+const CALLLOG_STATUS_URL = 'calllog_status.json';
+
+function ago(isoStr) {
+  if (!isoStr) return 'never';
+  const ms = Date.now() - new Date(isoStr).getTime();
+  if (ms < 0) return 'just now';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h ago`;
+}
+
+function size(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function setDot(id, healthy) {
+  const dot = document.getElementById(id);
+  dot.className = 'dot ' + (healthy ? 'green' : 'red');
+}
+
+function renderCourt(data) {
+  const el = document.getElementById('court-status');
+  if (!data || data.error) {
+    setDot('dot-court', false);
+    el.innerHTML = `<p class="error">${data ? data.error : 'No data'}</p>`;
+    return;
+  }
+  setDot('dot-court', true);
+  const lastRun = data.latest_run_finished_at || '';
+  const age = ago(lastRun);
+  const fresh = lastRun && (Date.now() - new Date(lastRun).getTime() < 86400000);
+  if (!fresh) setDot('dot-court', false);
+  el.innerHTML = `
+    <div class="stat"><span class="label">Cases</span><span class="value">${data.cases ?? '?'}</span></div>
+    <div class="stat"><span class="label">Appearances</span><span class="value">${data.appearances ?? '?'}</span></div>
+    <div class="stat"><span class="label">Detail rows</span><span class="value">${data.details ?? '?'}</span></div>
+    <div class="stat"><span class="label">DB size</span><span class="value">${size(data.db_size_bytes)}</span></div>
+    <div class="stat"><span class="label">Last run</span><span class="value">${age}</span></div>
+  `;
+}
+
+function renderCalllog(data) {
+  const el = document.getElementById('calllog-status');
+  if (!data || data.error) {
+    setDot('dot-calllog', false);
+    el.innerHTML = `<p class="error">${data ? data.error : 'No data'}</p>`;
+    return;
+  }
+  setDot('dot-calllog', true);
+  el.innerHTML = `
+    <div class="stat"><span class="label">Status</span><span class="value">${data.status || 'OK'}</span></div>
+    <div class="stat"><span class="label">Last run</span><span class="value">${ago(data.timestamp)}</span></div>
+  `;
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return { error: `HTTP ${r.status}` };
+    return await r.json();
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+async function refresh() {
+  const [court, calllog] = await Promise.all([
+    fetchJSON(COURT_STATUS_URL),
+    fetchJSON(CALLLOG_STATUS_URL),
+  ]);
+  renderCourt(court);
+  renderCalllog(calllog);
+  document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
+}
+
+refresh();
+setInterval(refresh, 60000);
+</script>
+</body>
+</html>

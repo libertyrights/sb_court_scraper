@@ -1,0 +1,512 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Local Data Browser</div>
+    <h2>Search scraped court data</h2>
+    <p>Search by case number, defendant, alias, charge text, department, judge, attorney, booking number, or other indexed case text.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">FTS Search Enabled</span>
+    <span class="header-chip">New Case Window: {{ 7 }} days</span>
+  </div>
+</header>
+
+<form method="get" class="search-panel">
+  <div class="global-search-row">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Search cases, names, charges, departments, judges, booking numbers...">
+    <button type="submit">Search</button>
+  </div>
+
+  {% if not availability.has_arrest_data or not availability.has_demographics %}
+  <div class="availability-note">
+    {% if availability.using_lcn_fallback %}
+    <div><strong>LCN enrichment active:</strong> arrest agency, location, and available demographic fields are being supplied from matched Local Crime News arrest records when CAP leaves them blank.</div>
+    {% endif %}
+    {% if availability.cap_arrest_rows == 0 %}
+    <div><strong>CAP arrest rows:</strong> <code>case_arrests</code> still has 0 rows in this snapshot, so the arrest filters below are currently leaning on LCN-linked case matches.</div>
+    {% endif %}
+    {% if not availability.has_demographics %}
+    <div><strong>Demographics:</strong> no usable sex/race/age rows are available yet from either CAP or matched LCN records in this DB snapshot.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="filters-grid">
+    <label>
+      <span>Status</span>
+      <select name="status">
+        <option value="">All</option>
+        {% for value in filter_options.statuses %}
+        <option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Category</span>
+      <select name="category">
+        <option value="">All</option>
+        {% for value in filter_options.categories %}
+        <option value="{{ value }}" {{ 'selected' if filters.category == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Department</span>
+      <select name="department">
+        <option value="">All</option>
+        {% for value in filter_options.departments %}
+        <option value="{{ value }}" {{ 'selected' if filters.department == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Hearing Type</span>
+      <select name="hearing_type">
+        <option value="">All</option>
+        {% for value in filter_options.hearing_types %}
+        <option value="{{ value }}" {{ 'selected' if filters.hearing_type == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Charge Code</span>
+      <select name="charge_code">
+        <option value="">All</option>
+        {% for row in filter_options.charge_codes %}
+        <option value="{{ row.value }}" {{ 'selected' if filters.charge_code == row.value else '' }}>
+          {{ row.value }}{% if row.description %} - {{ row.description }}{% endif %} ({{ row.n }})
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Arrest Agency</span>
+      <select name="arrest_agency" {{ 'disabled' if not availability.has_arrest_agencies else '' }}>
+        <option value="">{{ 'No arrest agencies loaded yet' if not availability.has_arrest_agencies else 'All' }}</option>
+        {% for value in filter_options.arrest_agencies %}
+        <option value="{{ value }}" {{ 'selected' if filters.arrest_agency == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Arrest From</span>
+      <input type="date" name="arrest_date_from" value="{{ filters.arrest_date_from }}">
+    </label>
+
+    <label>
+      <span>Arrest To</span>
+      <input type="date" name="arrest_date_to" value="{{ filters.arrest_date_to }}">
+    </label>
+
+    <label>
+      <span>Arrest Location</span>
+      <input type="text" name="arrest_location" value="{{ filters.arrest_location }}" placeholder="{{ 'No arrest locations loaded yet' if not availability.has_arrest_locations else 'Contains...' }}" {{ 'disabled' if not availability.has_arrest_locations else '' }}>
+    </label>
+
+    <label>
+      <span>Filed From</span>
+      <input type="date" name="filed_from" value="{{ filters.filed_from }}">
+    </label>
+
+    <label>
+      <span>Filed To</span>
+      <input type="date" name="filed_to" value="{{ filters.filed_to }}">
+    </label>
+
+    <label>
+      <span>Sort</span>
+      <select name="sort">
+        <option value="recent" {{ 'selected' if filters.sort == 'recent' else '' }}>Recently Seen</option>
+        <option value="filed" {{ 'selected' if filters.sort == 'filed' else '' }}>Filed Date</option>
+        <option value="next_hearing" {{ 'selected' if filters.sort == 'next_hearing' else '' }}>Next Hearing</option>
+        <option value="arrest_date" {{ 'selected' if filters.sort == 'arrest_date' else '' }}>Arrest Date</option>
+        <option value="case_number" {{ 'selected' if filters.sort == 'case_number' else '' }}>Case Number</option>
+        <option value="defendant" {{ 'selected' if filters.sort == 'defendant' else '' }}>Defendant</option>
+        <option value="department" {{ 'selected' if filters.sort == 'department' else '' }}>Department</option>
+        <option value="charge" {{ 'selected' if filters.sort == 'charge' else '' }}>Charge Code</option>
+        <option value="status" {{ 'selected' if filters.sort == 'status' else '' }}>Status</option>
+      </select>
+    </label>
+
+    <label>
+      <span>Direction</span>
+      <select name="sort_dir">
+        <option value="desc" {{ 'selected' if filters.sort_dir == 'desc' else '' }}>Descending</option>
+        <option value="asc" {{ 'selected' if filters.sort_dir == 'asc' else '' }}>Ascending</option>
+      </select>
+    </label>
+
+    <label class="toggle-label">
+      <span>New cases only</span>
+      <input type="checkbox" name="new_only" value="1" {{ 'checked' if filters.new_only else '' }}>
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit">Apply Filters</button>
+    <a href="/">Reset</a>
+    <a href="/?{{ replace_query(filters, page=None, case=None, download='csv') }}">Export Current Results CSV</a>
+  </div>
+</form>
+
+<section class="workspace-grid">
+  <div class="results-panel">
+    <div class="panel-head">
+      <div>
+        <h3>Results</h3>
+        <p>{{ results.total }} matching cases{% if filters.q %} for “{{ filters.q }}”{% endif %}</p>
+      </div>
+      <div class="page-badges">
+        <span class="soft-badge">Page {{ results.page }} / {{ results.total_pages }}</span>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='case_number', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'case_number', 'asc')) }}">Case {{ sort_indicator(filters.sort, filters.sort_dir, 'case_number') }}</a></th>
+            <th>Category</th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='defendant', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'defendant', 'asc')) }}">Defendant {{ sort_indicator(filters.sort, filters.sort_dir, 'defendant') }}</a></th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='filed', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'filed', 'desc')) }}">Filed {{ sort_indicator(filters.sort, filters.sort_dir, 'filed') }}</a></th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='next_hearing', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'next_hearing', 'asc')) }}">Next Hearing {{ sort_indicator(filters.sort, filters.sort_dir, 'next_hearing') }}</a></th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='arrest_date', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'arrest_date', 'desc')) }}">Arrest Date {{ sort_indicator(filters.sort, filters.sort_dir, 'arrest_date') }}</a></th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='department', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'department', 'asc')) }}">Dept {{ sort_indicator(filters.sort, filters.sort_dir, 'department') }}</a></th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='charge', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'charge', 'asc')) }}">Charge {{ sort_indicator(filters.sort, filters.sort_dir, 'charge') }}</a></th>
+            <th>Arrest</th>
+            <th><a class="sort-link" href="/?{{ replace_query(filters, page=1, case=selected_case_id, sort='status', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'status', 'asc')) }}">Status {{ sort_indicator(filters.sort, filters.sort_dir, 'status') }}</a></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in results.rows %}
+          <tr class="{{ 'selected-row' if selected_case_id == row.cap_case_id else '' }}">
+            <td>
+              <a href="{{ case_url(row.cap_case_id) }}">{{ row.case_number }}</a>
+              <small>{{ row.cap_case_id }}</small>
+            </td>
+            <td>{% if row.category %}<span class="badge badge-{{ row.category.lower() }}">{{ row.category }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>
+              <strong><a href="{{ case_url(row.cap_case_id) }}">{{ row.defendant_name }}</a></strong>
+              <small>{{ row.style }}</small>
+            </td>
+            <td>{{ row.file_date or '—' }}</td>
+            <td>
+              <strong>{{ row.next_hearing_date or '—' }}</strong>
+              <small>{{ row.next_hearing_time or '' }} {{ row.next_hearing_calendar or '' }}</small>
+            </td>
+            <td>{{ row.arrest_date or 'â€”' }}</td>
+            <td>
+              {% if row.latest_department %}
+              <a href="/?{{ replace_query(filters, page=1, case=row.cap_case_id, department=row.latest_department) }}">{{ row.latest_department }}</a>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>
+              {% if row.top_statute %}
+              <strong><a href="/?{{ replace_query(filters, page=1, case=row.cap_case_id, charge_code=strip_charge_suffix(row.top_statute)) }}">{{ strip_charge_suffix(row.top_statute) }}</a></strong>
+              {% else %}
+              <strong>—</strong>
+              {% endif %}
+              <small>{{ clean_charge_description(row.charge_preview, row.top_statute) or row.charge_preview or 'No charge text captured yet' }}</small>
+            </td>
+            <td>
+              {% if row.arresting_agency or row.arrest_location %}
+              {% if row.arresting_agency %}
+              <strong><a href="/?{{ replace_query(filters, page=1, case=row.cap_case_id, arrest_agency=row.arresting_agency) }}">{{ row.arresting_agency }}</a></strong>
+              {% endif %}
+              {% if row.arrest_location %}
+              <small>{{ row.arrest_location }}</small>
+              {% endif %}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>
+              {% if row.status %}
+              <a href="/?{{ replace_query(filters, page=1, case=row.cap_case_id, status=row.status) }}">{{ row.status }}</a>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="empty-cell">No cases matched the current search.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination-row">
+      {% if results.page > 1 %}
+      <a href="/?{{ replace_query(filters, case=selected_case_id, page=results.page - 1) }}">Previous</a>
+      {% else %}
+      <span class="disabled-link">Previous</span>
+      {% endif %}
+
+      <span>Page {{ results.page }} of {{ results.total_pages }}</span>
+
+      {% if results.page < results.total_pages %}
+      <a href="/?{{ replace_query(filters, case=selected_case_id, page=results.page + 1) }}">Next</a>
+      {% else %}
+      <span class="disabled-link">Next</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside class="detail-panel">
+    {% if detail %}
+    <div class="detail-head">
+      <div class="detail-head-row">
+        <div>
+          <div class="page-kicker">Selected Case</div>
+          <h3>{{ detail.overview.case_number }}</h3>
+          <p>{{ detail.overview.defendant_name }}</p>
+          {% if detail.jail_prefill %}
+          <p class="detail-subnote">
+            {% if detail.jail_prefill.booking %}
+            Jail lookup has a booking number ready.
+            {% elif detail.jail_prefill.search_ready %}
+            Jail lookup has the required name, gender, and {{ 'DOB' if detail.jail_prefill.dob else 'age' }}.
+            {% else %}
+            Jail lookup still needs {{ detail.jail_prefill.missing_requirements|join(', ') }}.
+            {% endif %}
+          </p>
+          {% endif %}
+        </div>
+        <div class="detail-head-actions">
+          <a class="button-secondary" href="{{ case_url(detail.overview.cap_case_id) }}">Open Case Page</a>
+          <a class="button-secondary" href="/jail-import?case={{ detail.overview.cap_case_id }}">Jail Lookup</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Overview</div>
+      <dl class="detail-grid">
+        <div><dt>Status</dt><dd>{{ detail.overview.status or '—' }}</dd></div>
+        <div><dt>Category</dt><dd>{% if detail.overview.category %}<span class="badge badge-{{ detail.overview.category.lower() }}">{{ detail.overview.category }}</span>{% else %}—{% endif %}</dd></div>
+        <div><dt>Filed</dt><dd>{{ detail.overview.file_date or '—' }}</dd></div>
+        <div><dt>Citation</dt><dd>{{ detail.overview.citation_number or '—' }}</dd></div>
+        <div><dt>Next Hearing</dt><dd>{{ detail.overview.next_hearing or '—' }}</dd></div>
+        <div><dt>Latest Seen</dt><dd>{{ detail.overview.latest_seen_at or '—' }}</dd></div>
+        <div><dt>Detail Scraped</dt><dd>{{ detail.overview.detail_scraped_at or '—' }}</dd></div>
+      </dl>
+      <div class="case-style">{{ detail.overview.style }}</div>
+    </section>
+
+    <section class="detail-card accent-card">
+      <div class="detail-card-title">Call Log Match Slot</div>
+      <p>This case panel is already reserved for later call-log linkage. Once we add matching logic, candidate calls can land here.</p>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Demographics</div>
+      <ul class="stack-list compact">
+        {% for row in detail.demographics %}
+        <li>
+          <strong>{{ row.sex or 'Unknown sex' }}{% if row.race %} · {{ row.race }}{% endif %}</strong>
+          <span>
+            {% if row.age_text %}Age {{ row.age_text }}{% endif %}
+            {% if row.date_of_birth_text %}{% if row.age_text %} · {% endif %}DOB {{ row.date_of_birth_text }}{% endif %}
+            {% if row.source_system %}{% if row.age_text or row.date_of_birth_text %} · {% endif %}Source {{ row.source_system }}{% endif %}
+          </span>
+        </li>
+        {% else %}
+        <li><span>No demographics captured yet.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Parties</div>
+      <ul class="stack-list">
+        {% for row in detail.parties %}
+        <li>
+          <strong>{{ row.full_name or row.business_name or 'Unnamed party' }}</strong>
+          <span>{{ row.party_type }}{% if row.is_defendant %} · Defendant{% endif %}</span>
+        </li>
+        {% else %}
+        <li><span>No parties captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Aliases</div>
+      <ul class="stack-list compact">
+        {% for row in detail.aliases %}
+        <li><strong>{{ row.full_name }}</strong></li>
+        {% else %}
+        <li><span>No aliases captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Charges</div>
+      <ul class="stack-list">
+        {% for row in detail.charges %}
+        <li>
+          {% set charge_value = strip_charge_suffix(row.statute_raw or '') %}
+          <strong>
+            {% if charge_value %}
+            <a href="/?{{ replace_query(filters, page=1, case=detail.overview.cap_case_id, charge_code=charge_value) }}">{{ charge_value }}</a>
+            {% else %}
+            {{ row.charge_number or 'Charge' }}
+            {% endif %}
+          </strong>
+          <span>{{ row.offense_description or 'No offense description' }}</span>
+        </li>
+        {% else %}
+        <li><span>No charges captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Hearings</div>
+      <ul class="stack-list">
+        {% for row in detail.hearings %}
+        <li>
+          <strong>{{ row.hearing_date or '—' }} {{ row.hearing_time or '' }}</strong>
+          <span>
+            {% if row.hearing_type_text %}
+            <a href="/?{{ replace_query(filters, page=1, case=detail.overview.cap_case_id, hearing_type=row.hearing_type_text) }}">{{ row.hearing_type_text }}</a>
+            {% else %}
+            Hearing
+            {% endif %}
+            {% if row.calendar_text %} · {{ row.calendar_text }}{% endif %}
+          </span>
+        </li>
+        {% else %}
+        <li><span>No hearings captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Calendar Appearances</div>
+      <ul class="stack-list compact">
+        {% for row in detail.appearances %}
+        <li>
+          <strong>{{ row.calendar_date or row.session_date or '—' }}</strong>
+          <span>
+            {% if row.courtroom_text %}
+            <a href="/?{{ replace_query(filters, page=1, case=detail.overview.cap_case_id, department=row.courtroom_text) }}">{{ row.courtroom_text }}</a>
+            {% else %}
+            —
+            {% endif %}
+            {% if row.hearing_type_text %} · <a href="/?{{ replace_query(filters, page=1, case=detail.overview.cap_case_id, hearing_type=row.hearing_type_text) }}">{{ row.hearing_type_text }}</a>{% endif %}
+          </span>
+        </li>
+        {% else %}
+        <li><span>No calendar appearances captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Attorneys</div>
+      <ul class="stack-list compact">
+        {% for row in detail.attorneys %}
+        <li>
+          <strong>{{ row.full_name or 'Attorney' }}</strong>
+          <span>{{ row.representing_text or '' }}{% if row.bar_number %} · {{ row.bar_number }}{% endif %}</span>
+        </li>
+        {% else %}
+        <li><span>No attorneys captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Arrests</div>
+      <ul class="stack-list compact">
+        {% for row in detail.arrests %}
+        <li>
+          <strong>{{ row.arrest_date or row.arrest_datetime or '—' }}</strong>
+          <span>
+            {% if row.arresting_agency %}
+            <a href="/?{{ replace_query(filters, page=1, case=detail.overview.cap_case_id, arrest_agency=row.arresting_agency) }}">{{ row.arresting_agency }}</a>
+            {% else %}
+            —
+            {% endif %}
+            {% if row.arrest_location %} · {{ row.arrest_location }}{% endif %}
+            {% if row.source_system %} · {{ row.source_system }}{% endif %}
+            {% if row.source_note %} · {{ row.source_note }}{% endif %}
+          </span>
+        </li>
+        {% else %}
+        <li><span>No arrest records captured yet.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% if detail.lcn_matches %}
+    <section class="detail-card">
+      <div class="detail-card-title">LCN Match Candidates</div>
+      <ul class="stack-list compact">
+        {% for row in detail.lcn_matches %}
+        <li>
+          <strong>{{ row.arrest_date or '—' }}{% if row.match_confidence %} · {{ row.match_confidence|upper }}{% endif %}</strong>
+          <span>
+            {{ row.arresting_agency or 'Unknown agency' }}
+            {% if row.arrest_location %} · {{ row.arrest_location }}{% endif %}
+            {% if row.arrested_for_text %} · {{ row.arrested_for_text }}{% endif %}
+          </span>
+          {% if row.match_basis %}
+          <small>{{ row.match_basis }}</small>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <section class="detail-card">
+      <div class="detail-card-title">Events</div>
+      <ul class="stack-list compact">
+        {% for row in detail.events %}
+        <li>
+          <strong>{{ row.event_date or '—' }}</strong>
+          <span>{{ row.event_type or 'Event' }}{% if row.comment %} · {{ row.comment }}{% endif %}</span>
+        </li>
+        {% else %}
+        <li><span>No events captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Documents</div>
+      <ul class="stack-list compact">
+        {% for row in detail.documents %}
+        <li>
+          <strong>{{ row.name or row.doc_type or 'Document' }}</strong>
+          <span>{{ row.effective_date or '—' }}{% if row.page_count %} · {{ row.page_count }} pages{% endif %}</span>
+        </li>
+        {% else %}
+        <li><span>No documents captured.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% else %}
+    <div class="empty-detail">
+      <h3>No case selected</h3>
+      <p>Run a search or click a case row to see the detail panel.</p>
+    </div>
+    {% endif %}
+  </aside>
+</section>
+{% endblock %}

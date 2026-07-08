@@ -1,0 +1,153 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Manual Intake</div>
+    <h2>Jail locator handoff</h2>
+    <p>Use the official Sheriff inmate locator with a human-in-the-loop CAPTCHA solve. This page preloads the best court or LCN data we have so you can launch the helper without retyping the case.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">
+      {% if jail_prefill.search_mode == 'booking' %}
+      Booking Search Ready
+      {% elif jail_prefill.search_ready %}
+      Name Search Ready
+      {% else %}
+      Manual Completion Needed
+      {% endif %}
+    </span>
+    {% if jail_prefill.booking %}
+    <span class="header-chip">Booking {{ jail_prefill.booking }}</span>
+    {% endif %}
+  </div>
+</header>
+
+{% if launch_message %}
+<section class="launch-status {{ 'launch-status-error' if launch_state == 'error' else 'launch-status-success' }}">
+  <strong>{{ 'Launch failed.' if launch_state == 'error' else 'Helper launched.' }}</strong>
+  <span>{{ launch_message }}</span>
+</section>
+{% endif %}
+
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Case Context</div>
+    {% if detail %}
+    <h3 class="helper-case-title">{{ detail.overview.case_number }}</h3>
+    <p class="helper-case-meta">{{ detail.overview.defendant_name }}</p>
+    <div class="helper-summary-grid">
+      <div><span>Case ID</span><strong>{{ detail.overview.cap_case_id }}</strong></div>
+      <div><span>Status</span><strong>{{ detail.overview.status or '—' }}</strong></div>
+      <div><span>Agency</span><strong>{{ jail_prefill.agency or '—' }}</strong></div>
+      <div><span>Location</span><strong>{{ jail_prefill.location or '—' }}</strong></div>
+    </div>
+    {% else %}
+    <p>Open this page from a selected case to preload defendant search fields automatically, or fill the form below manually.</p>
+    {% endif %}
+  </article>
+
+  <article class="detail-card accent-card">
+    <div class="detail-card-title">Readiness</div>
+    <p>{{ jail_prefill.readiness }}</p>
+    {% if jail_prefill.missing_requirements %}
+    <p class="helper-requirements">Still needed: {{ jail_prefill.missing_requirements|join(', ') }}.</p>
+    {% endif %}
+    {% if jail_prefill.source_notes %}
+    <ul class="stack-list compact helper-source-list">
+      {% for note in jail_prefill.source_notes %}
+      <li><span>{{ note }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+</section>
+
+<section class="detail-card">
+  <div class="detail-card-title">Launch Jail Helper</div>
+  <form method="get" action="/jail-import/launch" class="helper-form">
+    {% if selected_case_id %}
+    <input type="hidden" name="case" value="{{ selected_case_id }}">
+    {% endif %}
+
+    <div class="helper-form-grid">
+      <label>
+        <span>Booking Number</span>
+        <input type="text" name="booking" value="{{ jail_prefill.booking }}" placeholder="Preferred when available">
+      </label>
+
+      <label>
+        <span>Last Name</span>
+        <input type="text" name="last" value="{{ jail_prefill.last_name }}" placeholder="Required for name search">
+      </label>
+
+      <label>
+        <span>First Name</span>
+        <input type="text" name="first" value="{{ jail_prefill.first_name }}" placeholder="Required for name search">
+      </label>
+
+      <label>
+        <span>Middle Name</span>
+        <input type="text" name="middle" value="{{ jail_prefill.middle_name }}" placeholder="Optional">
+      </label>
+
+      <label>
+        <span>DOB</span>
+        <input type="text" name="dob" value="{{ jail_prefill.dob }}" placeholder="MM/DD/YYYY">
+      </label>
+
+      <label>
+        <span>Age</span>
+        <input type="text" name="age" value="{{ jail_prefill.age }}" placeholder="Use when DOB is unavailable">
+      </label>
+
+      {% if thats_them_url %}
+      <label>
+        <span>That'sThem</span>
+        <a class="button-secondary helper-inline-button" href="{{ thats_them_url }}" target="_blank" rel="noreferrer">That&apos;sThem Age Search</a>
+      </label>
+      {% endif %}
+
+      <label>
+        <span>Gender</span>
+        <select name="gender">
+          <option value="">Select</option>
+          <option value="M" {{ 'selected' if jail_prefill.gender == 'M' else '' }}>Male</option>
+          <option value="F" {{ 'selected' if jail_prefill.gender == 'F' else '' }}>Female</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Official Locator</span>
+        <input type="text" value="{{ official_jail_url }}" readonly>
+      </label>
+    </div>
+
+    <p class="helper-requirements">The official locator supports either a booking number, or last and first name plus gender and either DOB or age. When a booking number is present, the helper uses booking search first.</p>
+
+    <div class="form-actions">
+      <button type="submit">Launch Jail Helper</button>
+      <button type="submit" formaction="/jail-import">Refresh Prefill</button>
+      <a class="button-secondary" href="{{ official_jail_url }}" target="_blank" rel="noreferrer">Open Official Locator</a>
+    </div>
+  </form>
+</section>
+
+<section class="jail-grid jail-grid-two">
+  <article class="detail-card">
+    <div class="detail-card-title">Command Preview</div>
+    <pre>{{ jail_command }}</pre>
+    <p>The helper opens Chromium, fills the locator fields, waits for your CAPTCHA solve, and then captures the inmate results page into <code>output/jail_import/</code>.</p>
+  </article>
+
+  <article class="detail-card">
+    <div class="detail-card-title">What Gets Saved</div>
+    <ol class="workflow-list">
+      <li>The rendered inmate result HTML.</li>
+      <li>A full-page screenshot of what the Sheriff site showed after the CAPTCHA.</li>
+      <li>A text metadata file with capture timing and URLs.</li>
+      <li>A JSON summary with booking, name, DOB, age, sex, and any parsed result cells the page exposed.</li>
+    </ol>
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,186 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Person Summary</div>
+    <h2>{{ person.name }}</h2>
+    <p>Aggregated view across {{ person.case_count }} case{{ '' if person.case_count == 1 else 's' }}.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">{{ person.case_count }} case{{ '' if person.case_count == 1 else 's' }}</span>
+    <span class="header-chip">{{ person.booking_numbers|length }} booking number{{ '' if person.booking_numbers|length == 1 else 's' }}</span>
+    <span class="header-chip">{{ person.jail_captures|length }} jail capture{{ '' if person.jail_captures|length == 1 else 's' }}</span>
+  </div>
+</header>
+
+<section class="detail-card">
+  <div class="detail-card-title">Breakdowns</div>
+  <div style="display: flex; gap: 32px; flex-wrap: wrap;">
+    {% if person.status_breakdown %}
+    <div>
+      <div class="detail-card-title" style="font-size: 13px;">By Status</div>
+      <table class="mini-table">
+        <tbody>
+          {% for status, count in person.status_breakdown.items()|sort(attribute='1', reverse=True) %}
+          <tr>
+            <td><a href="/?{{ replace_query({}, status=status) }}">{{ status }}</a></td>
+            <td style="text-align:right">{{ count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if person.category_breakdown %}
+    <div>
+      <div class="detail-card-title" style="font-size: 13px;">By Category</div>
+      <table class="mini-table">
+        <tbody>
+          {% for cat, count in person.category_breakdown.items()|sort(attribute='1', reverse=True) %}
+          <tr>
+            <td><a href="/?{{ replace_query({}, category=cat) }}">{{ cat }}</a></td>
+            <td style="text-align:right">{{ count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if person.top_charges %}
+    <div>
+      <div class="detail-card-title" style="font-size: 13px;">Top Charges</div>
+      <table class="mini-table">
+        <tbody>
+          {% for charge, count in person.top_charges.items() %}
+          <tr>
+            <td><a href="/?{{ replace_query({}, charge_code=charge) }}">{{ charge }}</a></td>
+            <td style="text-align:right">{{ count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if person.top_departments %}
+    <div>
+      <div class="detail-card-title" style="font-size: 13px;">Top Departments</div>
+      <table class="mini-table">
+        <tbody>
+          {% for dept, count in person.top_departments.items() %}
+          <tr>
+            <td><a href="/?{{ replace_query({}, department=dept) }}">{{ dept }}</a></td>
+            <td style="text-align:right">{{ count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if person.next_hearing %}
+<section class="detail-card">
+  <div class="detail-card-title">Next Hearing</div>
+  <p>
+    <strong>{{ person.next_hearing.date }}</strong>
+    {% if person.next_hearing.time %} at {{ person.next_hearing.time }}{% endif %}
+    &mdash; {{ person.next_hearing.calendar or 'No calendar' }}
+    <br><a href="{{ case_url(person.next_hearing.case_number) }}">{{ person.next_hearing.case_number }}</a>
+  </p>
+</section>
+{% endif %}
+
+<section class="results-panel">
+  <div class="panel-head">
+    <div>
+      <h3>All Cases</h3>
+      <p>Cases tied to this person by defendant entity or matching name.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>Status</th>
+          <th>Category</th>
+          <th>Filed</th>
+          <th>Next Hearing</th>
+          <th>Top Charge</th>
+          <th>Agency</th>
+          <th>Department</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in person.case_summaries %}
+        <tr>
+          <td>
+            <strong><a href="{{ case_url(row.cap_case_id) }}">{{ row.case_number }}</a></strong>
+            <br><span class="text-muted">{{ row.defendant_name }}</span>
+          </td>
+          <td>{{ row.status or '-' }}</td>
+          <td>{% if row.category %}<span class="badge badge-{{ row.category.lower() }}">{{ row.category }}</span>{% else %}-{% endif %}</td>
+          <td>{{ row.file_date or '-' }}</td>
+          <td>
+            {% if row.next_hearing_date %}
+              {{ row.next_hearing_date }}{% if row.next_hearing_time %} {{ row.next_hearing_time }}{% endif %}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            {% if row.top_statute %}
+              <span title="{{ clean_charge_description(row.charge_preview, row.top_statute) }}">{{ strip_charge_suffix(row.top_statute) }}</span>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>{{ row.arresting_agency or '-' }}</td>
+          <td>{{ row.latest_department or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if person.booking_numbers %}
+<section class="detail-card">
+  <div class="detail-card-title">Booking Numbers ({{ person.booking_numbers|length }})</div>
+  <ul>
+    {% for bn in person.booking_numbers %}
+    <li><code>{{ bn }}</code></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if person.external_links %}
+<section class="detail-card">
+  <div class="detail-card-title">External Links ({{ person.external_links|length }})</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>URL</th>
+          <th>Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in person.external_links %}
+        <tr>
+          <td>{{ row.external_source }}</td>
+          <td><a href="{{ row.external_url }}" target="_blank" rel="noopener">{{ row.external_url|truncate(60) }}</a></td>
+          <td><a href="{{ case_url(row.cap_case_id) }}">{{ row.cap_case_id }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

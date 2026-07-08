@@ -1,0 +1,231 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Reporting</div>
+    <h2>Charge code ranking</h2>
+    <p>Rank all scraped charge codes by quantity, then narrow the list by date, department, hearing type, or recent new-case window.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">{{ report.totals.total_charge_rows }} charge rows</span>
+    <span class="header-chip">{{ report.totals.total_cases_seen }} cases represented</span>
+  </div>
+</header>
+
+<form method="get" class="search-panel report-panel">
+  <div class="global-search-row">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Filter charge code or description...">
+    <button type="submit">Run Report</button>
+  </div>
+
+  {% if not availability.has_demographics %}
+  <div class="availability-note">
+    <div><strong>Demographics unavailable:</strong> there are not yet enough CAP or LCN-linked demographic rows in this DB snapshot to build sex, race, and age-group charge rankings.</div>
+    {% if availability.using_lcn_fallback %}
+    <div><strong>LCN fallback:</strong> matched LCN arrest rows are enabled, so these demographic sections will start populating automatically as the backfill/concurrent enrichment runs succeed.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="filters-grid">
+    <label>
+      <span>Status</span>
+      <select name="status">
+        <option value="">All</option>
+        {% for value in filter_options.statuses %}
+        <option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Department</span>
+      <select name="department">
+        <option value="">All</option>
+        {% for value in filter_options.departments %}
+        <option value="{{ value }}" {{ 'selected' if filters.department == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Hearing Type</span>
+      <select name="hearing_type">
+        <option value="">All</option>
+        {% for value in filter_options.hearing_types %}
+        <option value="{{ value }}" {{ 'selected' if filters.hearing_type == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Charge Code</span>
+      <select name="charge_code">
+        <option value="">All</option>
+        {% for row in filter_options.charge_codes %}
+        <option value="{{ row.value }}" {{ 'selected' if filters.charge_code == row.value else '' }}>
+          {{ row.value }}{% if row.description %} - {{ row.description }}{% endif %} ({{ row.n }})
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Filed From</span>
+      <input type="date" name="filed_from" value="{{ filters.filed_from }}">
+    </label>
+
+    <label>
+      <span>Filed To</span>
+      <input type="date" name="filed_to" value="{{ filters.filed_to }}">
+    </label>
+
+    <label class="toggle-label">
+      <span>New cases only</span>
+      <input type="checkbox" name="new_only" value="1" {{ 'checked' if filters.new_only else '' }}>
+    </label>
+
+    <label>
+      <span>Sort</span>
+      <select name="sort">
+        <option value="charge_count" {{ 'selected' if filters.sort == 'charge_count' else '' }}>Charge Rows</option>
+        <option value="case_count" {{ 'selected' if filters.sort == 'case_count' else '' }}>Distinct Cases</option>
+        <option value="charge_code" {{ 'selected' if filters.sort == 'charge_code' else '' }}>Charge Code</option>
+        <option value="felony_count" {{ 'selected' if filters.sort == 'felony_count' else '' }}>Felonies</option>
+        <option value="misdemeanor_count" {{ 'selected' if filters.sort == 'misdemeanor_count' else '' }}>Misdemeanors</option>
+        <option value="infraction_count" {{ 'selected' if filters.sort == 'infraction_count' else '' }}>Infractions</option>
+        <option value="sample_description" {{ 'selected' if filters.sort == 'sample_description' else '' }}>Description</option>
+      </select>
+    </label>
+
+    <label>
+      <span>Direction</span>
+      <select name="sort_dir">
+        <option value="desc" {{ 'selected' if filters.sort_dir == 'desc' else '' }}>Descending</option>
+        <option value="asc" {{ 'selected' if filters.sort_dir == 'asc' else '' }}>Ascending</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit">Apply Filters</button>
+    <a href="/reports/charges">Reset</a>
+    <a href="/reports/charges?{{ replace_query(filters, page=None, download='csv') }}">Export Charge Report CSV</a>
+  </div>
+</form>
+
+{% if availability.has_demographics %}
+<section class="detail-card">
+  <div class="detail-card-title">Demographic Breakdowns</div>
+  <div class="report-breakdown-grid">
+    <article>
+      <h4>Top Charge by Sex</h4>
+      <ul class="stack-list compact">
+        {% for row in demographic_breakdowns.sex %}
+        <li>
+          <strong>{{ row.demographic_value }}</strong>
+          <span><a href="/?{{ replace_query({}, charge_code=row.charge_code) }}">{{ row.charge_code }}</a> · {{ row.charge_count }} rows / {{ row.case_count }} cases</span>
+        </li>
+        {% else %}
+        <li><span>No sex-based charge breakdowns yet.</span></li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article>
+      <h4>Top Charge by Race</h4>
+      <ul class="stack-list compact">
+        {% for row in demographic_breakdowns.race %}
+        <li>
+          <strong>{{ row.demographic_value }}</strong>
+          <span><a href="/?{{ replace_query({}, charge_code=row.charge_code) }}">{{ row.charge_code }}</a> · {{ row.charge_count }} rows / {{ row.case_count }} cases</span>
+        </li>
+        {% else %}
+        <li><span>No race-based charge breakdowns yet.</span></li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article>
+      <h4>Top Charge by Age Group</h4>
+      <ul class="stack-list compact">
+        {% for row in demographic_breakdowns.age_group %}
+        <li>
+          <strong>{{ row.demographic_value }}</strong>
+          <span><a href="/?{{ replace_query({}, charge_code=row.charge_code) }}">{{ row.charge_code }}</a> · {{ row.charge_count }} rows / {{ row.case_count }} cases</span>
+        </li>
+        {% else %}
+        <li><span>No age-group charge breakdowns yet.</span></li>
+        {% endfor %}
+      </ul>
+    </article>
+  </div>
+</section>
+{% endif %}
+
+<section class="results-panel report-results">
+  <div class="panel-head">
+    <div>
+      <h3>Codes Ranked by Quantity</h3>
+      <p>{{ report.total }} distinct codes in the current report window</p>
+    </div>
+    <div class="page-badges">
+      <span class="soft-badge">Page {{ report.page }} / {{ report.total_pages }}</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='charge_code', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'charge_code', 'asc')) }}">Charge Code {{ sort_indicator(filters.sort, filters.sort_dir, 'charge_code') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='charge_count', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'charge_count', 'desc')) }}">Charge Rows {{ sort_indicator(filters.sort, filters.sort_dir, 'charge_count') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='case_count', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'case_count', 'desc')) }}">Distinct Cases {{ sort_indicator(filters.sort, filters.sort_dir, 'case_count') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='felony_count', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'felony_count', 'desc')) }}">F {{ sort_indicator(filters.sort, filters.sort_dir, 'felony_count') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='misdemeanor_count', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'misdemeanor_count', 'desc')) }}">M {{ sort_indicator(filters.sort, filters.sort_dir, 'misdemeanor_count') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='infraction_count', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'infraction_count', 'desc')) }}">I {{ sort_indicator(filters.sort, filters.sort_dir, 'infraction_count') }}</a></th>
+            <th><a class="sort-link" href="/reports/charges?{{ replace_query(filters, page=1, sort='sample_description', sort_dir=next_sort_dir(filters.sort, filters.sort_dir, 'sample_description', 'asc')) }}">Sample Description {{ sort_indicator(filters.sort, filters.sort_dir, 'sample_description') }}</a></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in report.rows %}
+        <tr>
+          <td>{{ ((report.page - 1) * 100) + loop.index }}</td>
+          <td>
+            <strong><a href="/?{{ replace_query({}, q=filters.q, status=filters.status, department=filters.department, hearing_type=filters.hearing_type, charge_code=row.charge_code, filed_from=filters.filed_from, filed_to=filters.filed_to, new_only=filters.new_only, page=1) }}">{{ row.charge_code }}</a></strong>
+          </td>
+          <td><a href="/?{{ replace_query({}, q=filters.q, status=filters.status, department=filters.department, hearing_type=filters.hearing_type, charge_code=row.charge_code, filed_from=filters.filed_from, filed_to=filters.filed_to, new_only=filters.new_only, page=1) }}">{{ row.charge_count }}</a></td>
+          <td><a href="/?{{ replace_query({}, q=filters.q, status=filters.status, department=filters.department, hearing_type=filters.hearing_type, charge_code=row.charge_code, filed_from=filters.filed_from, filed_to=filters.filed_to, new_only=filters.new_only, page=1) }}">{{ row.case_count }}</a></td>
+          <td>{{ row.felony_count }}</td>
+          <td>{{ row.misdemeanor_count }}</td>
+          <td>{{ row.infraction_count }}</td>
+          <td>{{ clean_charge_description(row.sample_description, row.charge_code) or row.sample_description or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="empty-cell">No charge rows matched the current report filters.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination-row">
+    {% if report.page > 1 %}
+    <a href="/reports/charges?{{ replace_query(filters, page=report.page - 1) }}">Previous</a>
+    {% else %}
+    <span class="disabled-link">Previous</span>
+    {% endif %}
+
+    <span>Page {{ report.page }} of {{ report.total_pages }}</span>
+
+    {% if report.page < report.total_pages %}
+    <a href="/reports/charges?{{ replace_query(filters, page=report.page + 1) }}">Next</a>
+    {% else %}
+    <span class="disabled-link">Next</span>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

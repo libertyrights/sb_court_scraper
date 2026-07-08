@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | Victorville Court Browser</title>
+  <link rel="stylesheet" href="/static/court_browser.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-kicker">Victorville</div>
+        <h1>Court Browser</h1>
+        <p>Search, review, and report on the scraped criminal calendar data.</p>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="/" class="{{ 'active' if active_nav == 'search' else '' }}">Search Browser</a>
+        <a href="/reports/charges" class="{{ 'active' if active_nav == 'reports' else '' }}">Charge Report</a>
+        <a href="/jail-import" class="{{ 'active' if active_nav == 'jail-import' else '' }}">Jail Import</a>
+      </nav>
+
+      <section class="sidebar-section">
+        <div class="sidebar-label">Snapshot</div>
+        <div class="metric-stack">
+          <div class="metric-card">
+            <strong>{{ nav_context.summary.total_cases }}</strong>
+            <span>Cases</span>
+          </div>
+          <div class="metric-card">
+            <strong>{{ nav_context.summary.active_cases }}</strong>
+            <span>Active</span>
+          </div>
+          <div class="metric-card">
+            <strong>{{ nav_context.summary.charge_rows }}</strong>
+            <span>Charges</span>
+          </div>
+          <div class="metric-card">
+            <strong>{{ nav_context.summary.appearance_rows }}</strong>
+            <span>Calendar Rows</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="sidebar-label">Recent Cases</div>
+        <ul class="mini-list">
+          {% for row in nav_context.recent_cases %}
+          <li>
+            <strong><a href="{{ case_url(row.cap_case_id) }}">{{ row.case_number }}</a></strong>
+            <span>{{ row.file_date or 'No filed date' }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="sidebar-label">Top Departments</div>
+        <ul class="mini-list">
+          {% for row in nav_context.top_departments %}
+          <li>
+            <strong><a href="/?{{ replace_query({}, department=row.label) }}">{{ row.label }}</a></strong>
+            <span>{{ row.n }} appearances</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="sidebar-label">Top Charge Codes</div>
+        <ul class="mini-list">
+          {% for row in nav_context.top_charge_codes %}
+          <li>
+            <strong><a href="/?{{ replace_query({}, charge_code=row.label) }}">{{ row.label }}</a></strong>
+            {% if row.description %}<span>{{ row.description }}</span>{% endif %}
+            <span>{{ row.n }} rows</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </aside>
+
+    <main class="main-shell">
+      <nav class="top-nav">
+        <a href="/" class="{{ 'active' if active_nav == 'search' else '' }}">Search Browser</a>
+        <a href="/reports/charges" class="{{ 'active' if active_nav == 'reports' else '' }}">Charge Report</a>
+        <a href="/jail-import" class="{{ 'active' if active_nav == 'jail-import' else '' }}">Jail Import</a>
+        <a href="/logs" class="{{ 'active' if active_nav == 'logs' else '' }}">Logs</a>
+      </nav>
+      {% if global_status and global_status.jobs %}
+      <section class="status-strip">
+        {% for job in global_status.jobs[:4] %}
+        <div class="status-pill status-pill-{{ job.tone }}">
+          <span class="status-dot"></span>
+          <strong>{{ job.label }}</strong>
+          <span>{{ job.status_label }}</span>
+          {% if job.detail %}<small>{{ job.detail }}</small>{% endif %}
+        </div>
+        {% endfor %}
+      </section>
+      {% endif %}
+      {% block content %}{% endblock %}
+      <footer class="app-footer">
+        <a href="/logs" class="{{ 'active' if active_nav == 'logs' else '' }}">Logs and Errors</a>
+      </footer>
+    </main>
+  </div>
+  {% if global_status and global_status.auto_refresh_seconds %}
+  <script>
+    window.setTimeout(function () {
+      window.location.reload();
+    }, {{ global_status.auto_refresh_seconds * 1000 }});
+  </script>
+  {% endif %}
+</body>
+</html>

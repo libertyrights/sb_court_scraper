@@ -1,0 +1,72 @@
+name: court-scraper
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * 1-5'
+
+concurrency:
+  group: court-scraper-publish
+  cancel-in-progress: false
+
+jobs:
+  scrape-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install chromium
+
+      - name: Download current DB from serv00
+        env:
+          FTP_HOST: ${{ secrets.SERV00_FTP_HOST }}
+          FTP_USER: ${{ secrets.SERV00_FTP_USER }}
+          FTP_PASS: ${{ secrets.SERV00_FTP_PASS }}
+        run: python fetch_db.py
+
+      - name: Run court calendar scraper
+        env:
+          CAP_USERNAME: ${{ secrets.CAP_USERNAME }}
+          CAP_PASSWORD: ${{ secrets.CAP_PASSWORD }}
+          CAP_HEADLESS: '1'
+        run: |
+          python vv_court_criminal_calendar_watch.py --start-date "" --days 7 --resume --no-details
+
+      - name: Upload DB to serv00
+        env:
+          FTP_HOST: ${{ secrets.SERV00_FTP_HOST }}
+          FTP_USER: ${{ secrets.SERV00_FTP_USER }}
+          FTP_PASS: ${{ secrets.SERV00_FTP_PASS }}
+        run: python upload_court_calendar_db.py
+
+      - name: Upload status JSON
+        if: always()
+        env:
+          FTP_HOST: ${{ secrets.SERV00_FTP_HOST }}
+          FTP_USER: ${{ secrets.SERV00_FTP_USER }}
+          FTP_PASS: ${{ secrets.SERV00_FTP_PASS }}
+        run: python upload_status.py
+
+      - name: Upload runtime artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: court-scraper-runtime-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            state/*.log
+            output/**/*.log

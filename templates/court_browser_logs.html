@@ -1,0 +1,98 @@
+{% extends "court_browser_base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="page-kicker">Diagnostics</div>
+    <h2>Logs and Background Jobs</h2>
+    <p>Recent court, jail, and enrichment jobs live here so failed runs are easy to inspect later.</p>
+  </div>
+  <div class="header-chips">
+    <span class="header-chip">{{ job_totals.total }} total jobs</span>
+    <span class="header-chip">{{ job_totals.error }} errors</span>
+    <span class="header-chip">{{ job_totals.running }} running</span>
+  </div>
+</header>
+
+<section class="detail-card">
+  <div class="detail-card-title">Filter Jobs</div>
+  <div class="form-actions">
+    <a href="/logs" class="{{ 'button-secondary' if status_filter else '' }}">All</a>
+    <a href="/logs?{{ urlencode({'status': 'error'}) }}" class="{{ 'button-secondary' if status_filter != 'error' else '' }}">Errors</a>
+    <a href="/logs?{{ urlencode({'status': 'running'}) }}" class="{{ 'button-secondary' if status_filter != 'running' else '' }}">Running</a>
+    <a href="/logs?{{ urlencode({'status': 'complete'}) }}" class="{{ 'button-secondary' if status_filter != 'complete' else '' }}">Complete</a>
+  </div>
+</section>
+
+<section class="log-layout">
+  <div class="detail-panel">
+    <section class="detail-card">
+      <div class="detail-card-title">Recent Jobs</div>
+      <ul class="stack-list compact">
+        {% for row in jobs %}
+        <li class="{{ 'log-row-active' if selected_job and row.job_key == selected_job.job_key else '' }}">
+          <strong><a href="/logs?{{ urlencode({'job': row.job_key, 'status': status_filter}) }}">{{ row.label }}</a></strong>
+          <span>{{ row.status|upper }}{% if row.target_case_number %} · {{ row.target_case_number }}{% endif %}</span>
+          {% if row.target_case_id %}
+          <small><a href="{{ case_url(row.target_case_id) }}">Open case {{ row.target_case_id }}</a></small>
+          {% endif %}
+          {% if row.detail %}
+          <small>{{ row.detail }}</small>
+          {% endif %}
+        </li>
+        {% else %}
+        <li><span>No background jobs have been recorded yet.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="detail-card">
+      <div class="detail-card-title">Recent Log Files</div>
+      <ul class="stack-list compact">
+        {% for row in log_files %}
+        <li>
+          <strong><a href="/logs?{{ urlencode({'path': row.path, 'status': status_filter}) }}">{{ row.name }}</a></strong>
+          <span>{{ row.mtime }} · {{ row.size }} bytes</span>
+        </li>
+        {% else %}
+        <li><span>No log files found yet.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <div class="results-panel">
+    <div class="panel-head">
+      <div>
+        <h3>Selected Log</h3>
+        <p>{{ selected_log_path or 'Nothing selected yet.' }}</p>
+      </div>
+      {% if selected_job and selected_job.command_text %}
+      <div class="page-badges">
+        <span class="soft-badge">{{ selected_job.status|upper }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if selected_job %}
+    <section class="detail-card detail-card-tight">
+      <div class="detail-card-title">Job Details</div>
+      <dl class="detail-grid">
+        <div><dt>Label</dt><dd>{{ selected_job.label }}</dd></div>
+        <div><dt>Status</dt><dd>{{ selected_job.status|upper }}</dd></div>
+        <div><dt>Case</dt><dd>{{ selected_job.target_case_number or '-' }}</dd></div>
+        <div><dt>Updated</dt><dd>{{ selected_job.updated_at or selected_job.started_at or '-' }}</dd></div>
+      </dl>
+      {% if selected_job.command_text %}
+      <pre class="log-command">{{ selected_job.command_text }}</pre>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="detail-card detail-card-tight">
+      <div class="detail-card-title">Log Tail</div>
+      <pre class="log-viewer">{{ selected_log_text }}</pre>
+    </section>
+  </div>
+</section>
+{% endblock %}

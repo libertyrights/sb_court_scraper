@@ -1,0 +1,7 @@
+beautifulsoup4>=4.12
+httpx>=0.25
+jinja2>=3.1
+matplotlib>=3.7
+openpyxl>=3.1
+playwright>=1.40
+python-dotenv>=1.0
