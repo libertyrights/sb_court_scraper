@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -16,6 +17,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = SCRIPT_DIR / "state" / "court_calendar.db"
 REMOTE_DIR = "/domains/upnexx.xyz/public_html/osint/private"
 REMOTE_FILE = "court_calendar.db"
+PUBLIC_REMOTE_DIR = "/domains/upnexx.xyz/public_html/osint"
+PUBLIC_RECORDS_FILE = "court_records.json"
 DETAIL_TABLES = [
     "case_aliases",
     "case_arrests",
@@ -116,6 +119,102 @@ def summarize_db(db_path: Path) -> dict[str, object]:
         conn.close()
 
 
+def row_value(row: sqlite3.Row, key: str) -> str:
+    value = row[key] if key in row.keys() else ""
+    return str(value or "").strip()
+
+
+def export_public_court_records(db_path: Path) -> bytes:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = []
+        for row in conn.execute(
+            """
+            SELECT
+                c.cap_case_id,
+                c.case_number,
+                c.case_type,
+                c.style,
+                c.file_date,
+                c.status,
+                c.court_location,
+                c.assigned_judicial_officer_text,
+                c.next_hearing,
+                c.citation_number,
+                c.is_criminal,
+                c.first_seen_at,
+                c.latest_seen_at,
+                c.detail_scraped_at,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT cp.full_name)
+                    FROM case_parties cp
+                    WHERE cp.cap_case_id = c.cap_case_id
+                      AND COALESCE(cp.full_name, '') <> ''
+                      AND (cp.is_defendant = 1 OR UPPER(COALESCE(cp.party_type, '')) LIKE '%DEF%')
+                ) AS defendants,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT ca.full_name)
+                    FROM case_aliases ca
+                    WHERE ca.cap_case_id = c.cap_case_id
+                      AND COALESCE(ca.full_name, '') <> ''
+                ) AS aliases,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT TRIM(COALESCE(cc.statute_raw, '') || ' ' || COALESCE(cc.offense_description, '')))
+                    FROM case_charges cc
+                    WHERE cc.cap_case_id = c.cap_case_id
+                      AND TRIM(COALESCE(cc.statute_raw, '') || COALESCE(cc.offense_description, '')) <> ''
+                ) AS charges,
+                (
+                    SELECT MAX(COALESCE(ch.hearing_date, ''))
+                    FROM case_hearings ch
+                    WHERE ch.cap_case_id = c.cap_case_id
+                ) AS latest_hearing_date,
+                (
+                    SELECT COUNT(*)
+                    FROM case_events ce
+                    WHERE ce.cap_case_id = c.cap_case_id
+                ) AS event_count
+            FROM cases c
+            ORDER BY COALESCE(c.file_date, '') DESC, c.case_number DESC
+            """
+        ):
+            rows.append(
+                {
+                    "cap_case_id": row_value(row, "cap_case_id"),
+                    "caseNumber": row_value(row, "case_number"),
+                    "caseType": row_value(row, "case_type"),
+                    "caseName": row_value(row, "style"),
+                    "name": row_value(row, "defendants") or row_value(row, "style"),
+                    "aliases": row_value(row, "aliases"),
+                    "fileDate": row_value(row, "file_date"),
+                    "date": row_value(row, "file_date"),
+                    "status": row_value(row, "status"),
+                    "court": row_value(row, "court_location"),
+                    "judge": row_value(row, "assigned_judicial_officer_text"),
+                    "nextHearing": row_value(row, "next_hearing"),
+                    "latestHearingDate": row_value(row, "latest_hearing_date"),
+                    "citationNumber": row_value(row, "citation_number"),
+                    "charge": row_value(row, "charges"),
+                    "eventCount": int(row["event_count"] or 0),
+                    "isCriminal": bool(row["is_criminal"]),
+                    "firstSeenAt": row_value(row, "first_seen_at"),
+                    "latestSeenAt": row_value(row, "latest_seen_at"),
+                    "detailScrapedAt": row_value(row, "detail_scraped_at"),
+                }
+            )
+    finally:
+        conn.close()
+
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "source": str(db_path),
+        "count": len(rows),
+        "records": rows,
+    }
+    return (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+
+
 def rotate_remote_file(ftp: FTP, remote_name: str, data: bytes) -> bool:
     remote_bytes = ftp_download_bytes(ftp, remote_name)
     if remote_bytes == data:
@@ -124,6 +223,11 @@ def rotate_remote_file(ftp: FTP, remote_name: str, data: bytes) -> bool:
 
     temp_remote = f"{remote_name}.new"
     backup_remote = f"{remote_name}.bak"
+    if remote_bytes is not None and len(remote_bytes) > len(data):
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        larger_backup = f"{remote_name}.larger-before-override.{stamp}.bak"
+        ftp_upload_bytes(ftp, larger_backup, remote_bytes)
+        print(f"[+] Backed up larger target before override: {larger_backup}")
 
     ftp_upload_bytes(ftp, temp_remote, data)
     print(f"[+] Uploaded {temp_remote}")
@@ -172,6 +276,13 @@ def upload_db() -> None:
         ftp.cwd(REMOTE_DIR)
         print(f"[+] Changed directory to {REMOTE_DIR}")
         rotate_remote_file(ftp, REMOTE_FILE, local_bytes)
+
+        public_records = export_public_court_records(DB_PATH)
+        ensure_remote_dir(ftp, PUBLIC_REMOTE_DIR)
+        ftp.cwd(PUBLIC_REMOTE_DIR)
+        print(f"[+] Changed directory to {PUBLIC_REMOTE_DIR}")
+        print(f"[+] Public court records: {len(public_records):,} bytes")
+        rotate_remote_file(ftp, PUBLIC_RECORDS_FILE, public_records)
     finally:
         try:
             ftp.quit()
